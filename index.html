@@ -1,0 +1,64 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Performance tests</title>
+</head>
+<body>
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+    ul, iframe {
+        height: 100%;
+    }
+    #testList {
+        position: absolute;
+        width: 200px;
+    }
+</style>
+<ul id="testList">
+
+</ul>
+<div style="margin-left: 200px; height: 700px">
+    <iframe id="testFrame" style="width: 100%; height: 100%">
+
+    </iframe>
+</div>
+<script>
+    var tests = [
+        {
+            name: "Local Storage",
+            path: "testModules/localStorage"
+        },
+        {
+            name: "Worker PostMessage",
+            path: "testModules/workerPostMessage"
+        },
+        {
+            name: "Window PostMessage",
+            path: "testModules/windowPostMessage"
+        }
+    ];
+    var runner = "util/doh/runner.html";
+
+    function runTest(module) {
+        document.getElementById("testFrame").src = runner + "?testModule=" + module;
+    }
+
+    var testList = document.getElementById("testList");
+    for(var i=0;i<tests.length;i++) {
+        var li = document.createElement("li");
+        li.innerHTML = tests[i].name;
+        li.onclick = (function(i) {
+            return function() {
+                runTest(tests[i].path);
+            }
+        })(i);
+        testList.appendChild(li);
+    }
+</script>
+
+</body>
+</html>
