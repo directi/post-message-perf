@@ -1,3 +1,19 @@
+window.performance = window.performance || {};
+performance.now = (function() {
+    return performance.now       ||
+        performance.mozNow    ||
+        performance.msNow     ||
+        performance.oNow      ||
+        performance.webkitNow ||
+        function() { return new Date().getTime(); };
+})();
+
+function includeIntoDohLogs(throughput, minLatency, maxLatency, avgLatency) {
+    var report = document.createElement("div");
+    report.innerHTML = " throughput: "+throughput.toFixed(2)+" req/ms<br/> minimum latency: " + minLatency.toFixed(2) + "ms<br/> maximum latency: " + maxLatency.toFixed(2) + "ms<br/> average latency: "+avgLatency.toFixed(2) + "ms";
+    document.getElementById("logBody").appendChild(report);
+}
+
 define(["doh/runner"], function(doh) {
     var workerPath = "../../testModules/worker.js";
     var sampleObj = {
@@ -59,15 +75,28 @@ define(["doh/runner"], function(doh) {
                 this.dohDef = new doh.Deferred();
                 this.received = 0;
                 var self = this;
+                this.sentTime = [];
+                this.latency = [];
                 this.worker.onmessage = function(event) {
-                    self.received++;
-                    if(self.received === testSize)
+                    self.latency.push(performance.now()-self.sentTime[self.received++]);
+                    if(self.received === testSize) {
+                        var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
+                        for(var i=0;i<testSize;i++) {
+                            sumLatency += self.latency[i];
+                            if(self.latency[i]<minLatency) minLatency = self.latency[i];
+                            if(self.latency[i]>maxLatency) maxLatency = self.latency[i];
+                        }
+                        var avgLatency = sumLatency/testSize;
+                        includeIntoDohLogs(throughput,minLatency,maxLatency,avgLatency);
                         self.dohDef.callback(true);
+                    }
                 }
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++)
+                for(var i=0;i<testSize;i++) {
+                    this.sentTime.push(performance.now());
                     this.worker.postMessage(sampleObj);
+                }
                 return this.dohDef;
             }
         },
@@ -100,15 +129,28 @@ define(["doh/runner"], function(doh) {
                 this.received = 0;
                 this.original = JSON.stringify(sampleObj);
                 var self = this;
+                this.sentTime = [];
+                this.latency = [];
                 self.worker.onmessage = function(event) {
-                    self.received++;
-                    if(self.received === testSize)
+                    self.latency.push(performance.now()-self.sentTime[self.received++]);
+                    if(self.received === testSize) {
+                        var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
+                        for(var i=0;i<testSize;i++) {
+                            sumLatency += self.latency[i];
+                            if(self.latency[i]<minLatency) minLatency = self.latency[i];
+                            if(self.latency[i]>maxLatency) maxLatency = self.latency[i];
+                        }
+                        var avgLatency = sumLatency/testSize;
+                        includeIntoDohLogs(throughput,minLatency,maxLatency,avgLatency);
                         self.dohDef.callback(true);
+                    }
                 }
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++)
+                for(var i=0;i<testSize;i++) {
+                    this.sentTime.push(performance.now());
                     this.worker.postMessage(this.original);
+                }
                 return this.dohDef;
             }
         }

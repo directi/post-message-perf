@@ -1,3 +1,13 @@
+window.performance = window.performance || {};
+performance.now = (function() {
+    return performance.now       ||
+        performance.mozNow    ||
+        performance.msNow     ||
+        performance.oNow      ||
+        performance.webkitNow ||
+        function() { return new Date().getTime(); };
+})();
+
 define(["doh/runner"], function(doh) {
 
     var child = document.createElement("iframe");
@@ -26,10 +36,23 @@ define(["doh/runner"], function(doh) {
 
     function getCountListener(test) {
         test.count = 0;
+        test.sentTime = [];
+        test.latency = [];
         return function(event) {
-            test.count++;
-            if(test.count === testSize)
+            test.latency.push(performance.now()-test.sentTime[test.count++]);
+            if(test.count === testSize) {
+                var throughput = testSize/(performance.now() - test.sentTime[0]), sumLatency = 0, minLatency = test.latency[0], maxLatency = test.latency[0];
+                for(var i=0;i<testSize;i++) {
+                    sumLatency += test.latency[i];
+                    if(test.latency[i]<minLatency) minLatency = test.latency[i];
+                    if(test.latency[i]>maxLatency) maxLatency = test.latency[i];
+                }
+                var avgLatency = sumLatency/testSize;
+                var report = document.createElement("div");
+                report.innerHTML = " throughput: "+throughput.toFixed(2)+" req/ms<br/> minimum latency: " + minLatency.toFixed(2) + "ms<br/> maximum latency: " + maxLatency.toFixed(2) + "ms<br/> average latency: "+avgLatency.toFixed(2) + "ms";
+                document.getElementById("logBody").appendChild(report);
                 test.dohDef.callback(true);
+            }
         }
     }
 
@@ -85,8 +108,10 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getCountListener);
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++)
+                for(var i=0;i<testSize;i++) {
+                    this.sentTime.push(performance.now());
                     child.contentWindow.postMessage(this.original, "*");
+                }
                 return this.dohDef;
             },
             tearDown: function() {
@@ -114,8 +139,10 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getCountListener);
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++)
+                for(var i=0;i<testSize;i++) {
+                    this.sentTime.push(performance.now());
                     child.contentWindow.postMessage(this.original, "*");
+                }
                 return this.dohDef;
             },
             tearDown: function() {
