@@ -14,7 +14,7 @@ function includeIntoDohLogs(throughput, minLatency, maxLatency, avgLatency) {
     document.getElementById("logBody").appendChild(report);
 }
 
-define(["doh/runner"], function(doh) {
+define(["doh/runner","dojo/Deferred"], function(doh,Def) {
     var workerPath = "../../testModules/worker.js";
     var sampleObj = {
         scalar: "scalar",
@@ -55,6 +55,8 @@ define(["doh/runner"], function(doh) {
                 this.dohDef = new doh.Deferred();
                 var self = this;
                 this.worker.onmessage = function(event) {
+                    if(event.data==="ready")
+                        return;
                     try {
                         doh.assertEqual(sampleObj, event.data);
                         self.dohDef.callback(true);
@@ -71,13 +73,20 @@ define(["doh/runner"], function(doh) {
         {
             name: "Passing "+testSize+" javascript objects to worker",
             setUp: function() {
-                this.worker = new Worker(workerPath);
                 this.dohDef = new doh.Deferred();
                 this.received = 0;
                 var self = this;
                 this.sentTime = [];
                 this.latency = [];
+                this.workerDef = new Def();
+                this.worker = new Worker(workerPath);
                 this.worker.onmessage = function(event) {
+                    if(event.data === "ready") {
+                        self.workerDef.resolve();
+                        self.worker.onmessage = messagePort;
+                    }
+                }
+                function messagePort(event) {
                     self.latency.push(performance.now()-self.sentTime[self.received++]);
                     if(self.received === testSize) {
                         var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
@@ -93,10 +102,57 @@ define(["doh/runner"], function(doh) {
                 }
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++) {
-                    this.sentTime.push(performance.now());
-                    this.worker.postMessage(sampleObj);
+                var self = this;
+                this.workerDef.then(function() {
+                    for(var i=0;i<testSize;i++) {
+                        self.sentTime.push(performance.now());
+                        self.worker.postMessage(sampleObj);
+                    }
+                });
+                return this.dohDef;
+            }
+        },
+        {
+            name: "Sending "+testSize+" javascript objects in series",
+            setUp: function() {
+                this.dohDef = new doh.Deferred();
+                this.workerDef = new Def();
+                this.worker = new Worker(workerPath);
+                this.sentTime = [];
+                this.latency = [];
+                this.received = 0;
+                var self = this;
+                this.worker.onmessage = function(e) {
+                    if(e.data === "ready") {
+                        self.workerDef.resolve();
+                        self.worker.onmessage = messagePort;
+                    }
                 }
+                function messagePort(event) {
+                    self.latency.push(performance.now()-self.sentTime[self.received++]);
+                    if(self.received === testSize) {
+                        console.warn(self.latency);
+                        var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
+                        for(var i=0;i<testSize;i++) {
+                            sumLatency += self.latency[i];
+                            if(self.latency[i]<minLatency) minLatency = self.latency[i];
+                            if(self.latency[i]>maxLatency) maxLatency = self.latency[i];
+                        }
+                        var avgLatency = sumLatency/testSize;
+                        includeIntoDohLogs(throughput,minLatency,maxLatency,avgLatency);
+                        self.dohDef.callback(true);
+                    } else {
+                        self.sentTime.push(performance.now());
+                        self.worker.postMessage(sampleObj);
+                    }
+                }
+            },
+            runTest: function() {
+                var self = this;
+                this.workerDef.then(function() {
+                    self.sentTime.push(performance.now());
+                    self.worker.postMessage(sampleObj);
+                });
                 return this.dohDef;
             }
         },
@@ -108,6 +164,8 @@ define(["doh/runner"], function(doh) {
                 this.original = JSON.stringify(sampleObj);
                 var self = this;
                 self.worker.onmessage = function(event) {
+                    if(event.data === "ready")
+                        return;
                     try {
                         doh.assertEqual(self.original, event.data);
                         self.dohDef.callback(true);
@@ -124,14 +182,22 @@ define(["doh/runner"], function(doh) {
         {
             name: "Passing "+testSize+" JSON to worker",
             setUp: function() {
-                this.worker = new Worker(workerPath);
                 this.dohDef = new doh.Deferred();
                 this.received = 0;
                 this.original = JSON.stringify(sampleObj);
                 var self = this;
                 this.sentTime = [];
                 this.latency = [];
+                this.workerDef = new Def();
+                this.worker = new Worker(workerPath);
                 self.worker.onmessage = function(event) {
+                    if(event.data === "ready") {
+                        self.workerDef.resolve();
+                        self.worker.onmessage = messagePort;
+                    }
+                }
+                function messagePort(event) {
+                    var obj = JSON.parse(event.data);
                     self.latency.push(performance.now()-self.sentTime[self.received++]);
                     if(self.received === testSize) {
                         var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
@@ -147,10 +213,58 @@ define(["doh/runner"], function(doh) {
                 }
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++) {
-                    this.sentTime.push(performance.now());
-                    this.worker.postMessage(this.original);
+                var self = this;
+                this.workerDef.then(function() {
+                    for(var i=0;i<testSize;i++) {
+                        self.sentTime.push(performance.now());
+                        self.worker.postMessage(JSON.stringify(sampleObj));
+                    }
+                });
+                return this.dohDef;
+            }
+        },
+        {
+            name: "Sending "+testSize+" JSONs in series",
+            setUp: function() {
+                this.dohDef = new doh.Deferred();
+                this.workerDef = new Def();
+                this.worker = new Worker(workerPath);
+                this.sentTime = [];
+                this.latency = [];
+                this.received = 0;
+                var self = this;
+                this.worker.onmessage = function(e) {
+                    if(e.data === "ready") {
+                        self.workerDef.resolve();
+                        self.worker.onmessage = messagePort;
+                    }
                 }
+                function messagePort(event) {
+                    var obj = JSON.parse(event.data);
+                    self.latency.push(performance.now()-self.sentTime[self.received++]);
+                    if(self.received === testSize) {
+                        console.warn(self.latency);
+                        var throughput = testSize/(performance.now() - self.sentTime[0]), sumLatency = 0, minLatency = self.latency[0], maxLatency = self.latency[0];
+                        for(var i=0;i<testSize;i++) {
+                            sumLatency += self.latency[i];
+                            if(self.latency[i]<minLatency) minLatency = self.latency[i];
+                            if(self.latency[i]>maxLatency) maxLatency = self.latency[i];
+                        }
+                        var avgLatency = sumLatency/testSize;
+                        includeIntoDohLogs(throughput,minLatency,maxLatency,avgLatency);
+                        self.dohDef.callback(true);
+                    } else {
+                        self.sentTime.push(performance.now());
+                        self.worker.postMessage(JSON.stringify(sampleObj));
+                    }
+                }
+            },
+            runTest: function() {
+                var self = this;
+                this.workerDef.then(function() {
+                    self.sentTime.push(performance.now());
+                    self.worker.postMessage(JSON.stringify(sampleObj));
+                });
                 return this.dohDef;
             }
         }

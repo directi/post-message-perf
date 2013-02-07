@@ -8,11 +8,15 @@ performance.now = (function() {
         function() { return new Date().getTime(); };
 })();
 
-define(["doh/runner"], function(doh) {
+define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
 
     var child = document.createElement("iframe");
     child.src = "../../testModules/repeater.html";
     document.body.appendChild(child);
+    var winDef = new Def();
+    on(child,"load",function() {
+        winDef.resolve();
+    });
     var testSize = 10000;
     var sampleObj = {
         scalar: "scalar",
@@ -39,6 +43,9 @@ define(["doh/runner"], function(doh) {
         test.sentTime = [];
         test.latency = [];
         return function(event) {
+            if(typeof event.data === "string") {
+                var obj = JSON.parse(event.data);
+            }
             test.latency.push(performance.now()-test.sentTime[test.count++]);
             if(test.count === testSize) {
                 var throughput = testSize/(performance.now() - test.sentTime[0]), sumLatency = 0, minLatency = test.latency[0], maxLatency = test.latency[0];
@@ -79,8 +86,10 @@ define(["doh/runner"], function(doh) {
                 setUp(this, orderListener);
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++)
-                    child.contentWindow.postMessage(i,"*");
+                winDef.then(function() {
+                    for(var i=0;i<testSize;i++)
+                        child.contentWindow.postMessage(i,"*");
+                });
                 return this.dohDef;
             },
             tearDown: function() {
@@ -94,7 +103,10 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getEqualListener);
             },
             runTest: function() {
-                child.contentWindow.postMessage(this.original, "*");
+                var self = this;
+                winDef.then(function() {
+                    child.contentWindow.postMessage(self.original, "*");
+                });
                 return this.dohDef;
             },
             tearDown: function() {
@@ -108,10 +120,13 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getCountListener);
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++) {
-                    this.sentTime.push(performance.now());
-                    child.contentWindow.postMessage(this.original, "*");
-                }
+                var self = this;
+                winDef.then(function() {
+                    for(var i=0;i<testSize;i++) {
+                        self.sentTime.push(performance.now());
+                        child.contentWindow.postMessage(self.original, "*");
+                    }
+                });
                 return this.dohDef;
             },
             tearDown: function() {
@@ -125,7 +140,10 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getEqualListener);
             },
             runTest: function() {
-                child.contentWindow.postMessage(this.original, "*");
+                var self = this;
+                winDef.then(function() {
+                    child.contentWindow.postMessage(self.original, "*");
+                });
                 return this.dohDef;
             },
             tearDown: function() {
@@ -139,10 +157,13 @@ define(["doh/runner"], function(doh) {
                 setUp(this, getCountListener);
             },
             runTest: function() {
-                for(var i=0;i<testSize;i++) {
-                    this.sentTime.push(performance.now());
-                    child.contentWindow.postMessage(this.original, "*");
-                }
+                var self = this;
+                winDef.then(function() {
+                    for(var i=0;i<testSize;i++) {
+                        self.sentTime.push(performance.now());
+                        child.contentWindow.postMessage(JSON.stringify(sampleObj), "*");
+                    }
+                });
                 return this.dohDef;
             },
             tearDown: function() {
