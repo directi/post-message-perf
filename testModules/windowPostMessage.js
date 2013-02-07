@@ -17,7 +17,7 @@ define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
     on(child,"load",function() {
         winDef.resolve();
     });
-    var testSize = 10000;
+    var testSize = 4000;
     var sampleObj = {
         scalar: "scalar",
         array: ["item1", "item2"],
@@ -59,6 +59,36 @@ define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
                 report.innerHTML = " throughput: "+throughput.toFixed(2)+" req/ms<br/> minimum latency: " + minLatency.toFixed(2) + "ms<br/> maximum latency: " + maxLatency.toFixed(2) + "ms<br/> average latency: "+avgLatency.toFixed(2) + "ms";
                 document.getElementById("logBody").appendChild(report);
                 test.dohDef.callback(true);
+            }
+        }
+    }
+
+    function getSerialListener(test) {
+        test.count = 0;
+        test.sentTime = [];
+        test.latency = [];
+        return function(event) {
+            var isJson = false;
+            if(typeof event.data === "string") {
+                var obj = JSON.parse(event.data);
+                isJson = true;
+            }
+            test.latency.push(performance.now()-test.sentTime[test.count++]);
+            if(test.count === testSize) {
+                var throughput = testSize/(performance.now() - test.sentTime[0]), sumLatency = 0, minLatency = test.latency[0], maxLatency = test.latency[0];
+                for(var i=0;i<testSize;i++) {
+                    sumLatency += test.latency[i];
+                    if(test.latency[i]<minLatency) minLatency = test.latency[i];
+                    if(test.latency[i]>maxLatency) maxLatency = test.latency[i];
+                }
+                var avgLatency = sumLatency/testSize;
+                var report = document.createElement("div");
+                report.innerHTML = " throughput: "+throughput.toFixed(2)+" req/ms<br/> minimum latency: " + minLatency.toFixed(2) + "ms<br/> maximum latency: " + maxLatency.toFixed(2) + "ms<br/> average latency: "+avgLatency.toFixed(2) + "ms";
+                document.getElementById("logBody").appendChild(report);
+                test.dohDef.callback(true);
+            } else {
+                test.sentTime.push(performance.now());
+                child.contentWindow.postMessage(isJson ? JSON.stringify(sampleObj):sampleObj, "*");
             }
         }
     }
@@ -134,6 +164,23 @@ define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
             }
         },
         {
+            name: "Sending "+testSize+" javascript objects to child window serially",
+            setUp: function() {
+                setUp(this, getSerialListener);
+            },
+            runTest: function() {
+                var self = this;
+                winDef.then(function() {
+                    self.sentTime.push(performance.now());
+                    child.contentWindow.postMessage(sampleObj, "*");
+                });
+                return this.dohDef;
+            },
+            tearDown: function() {
+                window.removeEventListener("message", this.listener, false);
+            }
+        },
+        {
             name: "Checking equality of JSON",
             setUp: function() {
                 this.original = JSON.stringify(sampleObj);
@@ -163,6 +210,23 @@ define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
                         self.sentTime.push(performance.now());
                         child.contentWindow.postMessage(JSON.stringify(sampleObj), "*");
                     }
+                });
+                return this.dohDef;
+            },
+            tearDown: function() {
+                window.removeEventListener("message", this.listener, false);
+            }
+        },
+        {
+            name: "Sending "+testSize+" JSONs to child window serially",
+            setUp: function() {
+                setUp(this, getSerialListener);
+            },
+            runTest: function() {
+                var self = this;
+                winDef.then(function() {
+                    self.sentTime.push(performance.now());
+                    child.contentWindow.postMessage(JSON.stringify(sampleObj), "*");
                 });
                 return this.dohDef;
             },
