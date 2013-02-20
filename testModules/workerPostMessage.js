@@ -24,7 +24,7 @@ define(["doh/runner","dojo/Deferred"], function(doh,Def) {
             random_crap: "random_crap"
         }
     };
-    var testSize = 10000;
+    var testSize = 7000;
 
     doh.register("worker post message", [
         {

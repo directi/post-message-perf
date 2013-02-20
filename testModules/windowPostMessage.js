@@ -17,7 +17,7 @@ define(["doh/runner","dojo/on","dojo/Deferred"], function(doh,on,Def) {
     on(child,"load",function() {
         winDef.resolve();
     });
-    var testSize = 4000;
+    var testSize = 7000;
     var sampleObj = {
         scalar: "scalar",
         array: ["item1", "item2"],
